@@ -2,6 +2,8 @@ import os
 import json
 import mimetypes
 import shutil
+import re
+import requests
 from typing import Any
 
 from cog import BasePredictor, Input, Path
@@ -54,23 +56,34 @@ class Predictor(BasePredictor):
             ],
         )
 
-    def copy_lora_file(self, lora_path: Path) -> str:
+    def copy_lora_file(self, lora_url: str) -> str:
         """
-        Copy the user-provided LoRA file into ComfyUI/models/loras/
+        Download the user-provided LoRA file from a URL, place it into ComfyUI/models/loras/,
         and ensure it has a .safetensors extension.
         Returns the final filename, e.g. "adapter_model_epoch172.safetensors".
         """
+
+        # Quick check to ensure it's a URL (very basic)
+        if not re.match(r"^https?:\/\/", lora_url):
+            raise ValueError("Invalid LoRA URL. Please provide a valid https:// or http:// link.")
+
         lora_dir = os.path.join("ComfyUI", "models", "loras")
         os.makedirs(lora_dir, exist_ok=True)
 
-        # Ensure it ends with .safetensors
-        base = os.path.basename(lora_path.name)
-        if not base.lower().endswith(".safetensors"):
-            base = base + ".safetensors"
+        # Attempt to derive a filename from the URL
+        filename = os.path.basename(lora_url)
+        if not filename.lower().endswith(".safetensors"):
+            filename += ".safetensors"
 
-        dst_path = os.path.join(lora_dir, base)
-        shutil.copy(lora_path, dst_path)
-        return base
+        dst_path = os.path.join(lora_dir, filename)
+
+        # Download and write to the local destination
+        resp = requests.get(lora_url)
+        resp.raise_for_status()
+        with open(dst_path, "wb") as f:
+            f.write(resp.content)
+
+        return filename
 
     def update_workflow(
         self,
@@ -125,8 +138,8 @@ class Predictor(BasePredictor):
             default="A modern lounge in lush greenery.",
             description="The text prompt describing your video scene.",
         ),
-        lora_file: Path = Input(
-            description="Local LoRA .safetensors file for fine-tuning."
+        lora_url: str = Input(
+            description="A URL pointing to your LoRA .safetensors file for fine-tuning."
         ),
         lora_strength: float = Input(
             default=1.0, description="Scale/strength for your LoRA."
@@ -170,18 +183,16 @@ class Predictor(BasePredictor):
         seed: int = seed_helper.predict_seed(),
     ) -> Path:
         """
-        Create a video using HunyuanVideo with a local LoRA. The LoRA file will be
-        copied into ComfyUI/models/loras/, but we skip any remote download by
-        temporarily blanking node 41's lora field.
+        Create a video using HunyuanVideo with a remote LoRA (downloaded at runtime).
         """
-        # Convert user seed to a valid integer (if you want randomization, adjust seed_helper usage)
+        # Convert user seed to a valid integer
         seed = seed_helper.generate(seed)
 
         # 1. Clean up previous runs
         self.comfyUI.cleanup(ALL_DIRECTORIES)
 
-        # 2. Copy the LoRA file to ComfyUI/models/loras/
-        lora_name = self.copy_lora_file(lora_file)
+        # 2. Download the LoRA file to ComfyUI/models/loras/
+        lora_name = self.copy_lora_file(lora_url)
 
         # 3. Load the main workflow JSON
         with open(api_json_file, "r") as f:
