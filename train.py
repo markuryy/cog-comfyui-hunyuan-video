@@ -20,11 +20,11 @@ INPUT_DIR = "input"
 OUTPUT_DIR = "output"
 MODEL_CACHE = "ckpts"
 
-# Hunyuan base model files, adjust as desired:
+# Hunyuan model files to download
 MODEL_FILES = ["hunyuan-video-t2v-720p.tar", "text_encoder.tar", "text_encoder_2.tar"]
 BASE_URL = "https://weights.replicate.delivery/default/hunyuan-video/ckpts/"
 
-# If your scripts are in a folder named "musubi-tuner", you can add:
+# If your scripts are in "musubi-tuner", you can add it to the path:
 sys.path.append("musubi-tuner")
 
 
@@ -85,35 +85,37 @@ def train(
     ),
 ) -> TrainingOutput:
     """
-    Minimal Hunyuan LoRA training script using musubi-tuner. Mirrors logic from the predict.py.
-    1. Ensure base weights are present (downloads if needed).
-    2. Extract the provided zip of videos & .txt captions into 'input/videos'.
-    3. Run musubi-tuner/cache_latents.py.
-    4. Run musubi-tuner/cache_text_encoder_outputs.py.
-    5. Train LoRA with musubi-tuner/hv_train_network.py.
-    6. Archive the results as .tar.
-    7. Optionally upload to Hugging Face if credentials are provided.
+    Minimal Hunyuan LoRA training script using musubi-tuner.
+
+    Steps:
+    1. Clean up old run output if present.
+    2. Download base weights if needed.
+    3. Extract input videos & .txt files.
+    4. Possibly create train.toml if not found.
+    5. Cache latents, text encoder outputs.
+    6. Train LoRA with musubi-tuner/hv_train_network.py.
+    7. Convert to ComfyUI-compatible safetensors using musubi-tuner/convert_lora.py.
+    8. Tar everything and return.
+    9. Optionally push to HF if desired.
     """
 
     if not input_videos:
-        raise ValueError(
-            "You must provide input_videos (a zip with videos & .txt captions)."
-        )
+        raise ValueError("You must provide a zip with videos & .txt captions.")
 
-    # Clean up old run output
+    # 1. Clean up old outputs
     clean_up()
 
-    # Download base model weights if needed
+    # 2. Download base weights
     download_weights()
 
-    # Handle seed
+    # 3. Random seed logic
     if seed <= 0:
         seed = int.from_bytes(os.urandom(2), "big")
     print(f"Using seed: {seed}")
 
-    # Ensure we have a default train.toml if it doesn't exist
+    # 4. Create train.toml if missing
     if not os.path.exists("train.toml"):
-        print("No train.toml found; creating a default config.")
+        print("Creating default train.toml...")
         with open("train.toml", "w") as f:
             f.write(
                 """[general]
@@ -131,18 +133,13 @@ frame_extraction = "head"
 """
             )
 
-    # Prepare directories
-    os.makedirs(INPUT_DIR, exist_ok=True)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    # Extract zip of videos + captions
+    # 5. Extract videos & text
     extract_zip(input_videos, INPUT_DIR)
 
-    # Latent pre-caching
-    print("Running latent pre-caching command...")
+    # 6. Cache latents
     latent_args = [
         "python",
-        "musubi-tuner/cache_latents.py",  # or just "cache_latents.py" if local
+        "musubi-tuner/cache_latents.py",
         "--dataset_config",
         "train.toml",
         "--vae",
@@ -153,11 +150,10 @@ frame_extraction = "head"
     ]
     subprocess.run(latent_args, check=True)
 
-    # Text encoder pre-caching
-    print("Running text encoder pre-caching command...")
+    # 7. Cache text encoder outputs
     text_encoder_args = [
         "python",
-        "musubi-tuner/cache_text_encoder_outputs.py",  # or just "cache_text_encoder_outputs.py"
+        "musubi-tuner/cache_text_encoder_outputs.py",
         "--dataset_config",
         "train.toml",
         "--text_encoder1",
@@ -169,8 +165,8 @@ frame_extraction = "head"
     ]
     subprocess.run(text_encoder_args, check=True)
 
-    # LoRA training
-    print("Running training command...")
+    # 8. Perform LoRA training
+    print("Running LoRA training...")
     training_args = [
         "accelerate",
         "launch",
@@ -178,7 +174,7 @@ frame_extraction = "head"
         "1",
         "--mixed_precision",
         "bf16",
-        "musubi-tuner/hv_train_network.py",  # or "hv_train_network.py" local
+        "musubi-tuner/hv_train_network.py",
         "--dit",
         os.path.join(
             MODEL_CACHE,
@@ -219,11 +215,33 @@ frame_extraction = "head"
 
     subprocess.run(training_args, check=True)
 
-    # Optionally upload to HF
+    # 9. Convert the resulting LoRA to ComfyUI-compatible format
+    original_lora_path = os.path.join(OUTPUT_DIR, "lora.safetensors")
+    if os.path.exists(original_lora_path):
+        converted_lora_path = os.path.join(OUTPUT_DIR, "lora_comfyui.safetensors")
+        print(
+            f"Converting from {original_lora_path} -> {converted_lora_path} (ComfyUI format)"
+        )
+        convert_args = [
+            "python",
+            "musubi-tuner/convert_lora.py",
+            "--input",
+            original_lora_path,
+            "--output",
+            converted_lora_path,
+            "--target",
+            "other",  # "other" -> diffusers style (ComfyUI)
+        ]
+        subprocess.run(convert_args, check=True)
+    else:
+        print("Warning: lora.safetensors not found, skipping conversion.")
+
+    # 10. If we have HF token and ID, upload to HF
     if hf_token and hub_model_id:
         handle_hf_upload(hub_model_id, hf_token)
 
-    # Create tarball of the results
+    # 11. Archive final results
+    output_path = "/tmp/trained_model.tar"
     output_path = "/tmp/trained_model.tar"
     print(f"Archiving LoRA outputs to {output_path}")
     os.system(f"tar -cvf {output_path} -C {OUTPUT_DIR} .")
@@ -252,7 +270,7 @@ def download_weights():
 
 
 def extract_zip(zip_path: Path, extraction_dir: str):
-    """Extract videos & .txt captions from the provided zip file."""
+    """Extract videos & .txt captions from the provided zip."""
     if not is_zipfile(zip_path):
         raise ValueError("The provided input_videos must be a zip file.")
 
@@ -263,19 +281,20 @@ def extract_zip(zip_path: Path, extraction_dir: str):
     file_count = 0
     with ZipFile(zip_path, "r") as zip_ref:
         for file_info in zip_ref.infolist():
+            # skip Mac hidden system files
             if not file_info.filename.startswith(
                 "__MACOSX/"
             ) and not file_info.filename.startswith("._"):
                 zip_ref.extract(file_info, final_videos_path)
                 file_count += 1
 
-    print(f"Extracted {file_count} files into: {final_videos_path}")
+    print(f"Extracted {file_count} total files to: {final_videos_path}")
 
 
 def handle_hf_upload(hub_model_id: str, hf_token: Secret):
     """Simple huggingface-cli upload."""
     token = hf_token.get_secret_value()
-    print(f"Logging into Hugging Face with token and uploading to {hub_model_id}")
+    print(f"Logging into Hugging Face and uploading to {hub_model_id}")
     os.system(f"huggingface-cli login --token {token}")
-    # For new repos, you may need to create it first: huggingface-cli repo create <hub_model_id>.
+    # For new repos, you may need to run: huggingface-cli repo create <hub_model_id>
     os.system(f"huggingface-cli upload {OUTPUT_DIR} --repo-id {hub_model_id} --folder")

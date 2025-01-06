@@ -4,6 +4,8 @@ import mimetypes
 import shutil
 import re
 import requests
+import tarfile
+import tempfile
 from typing import Any
 
 from cog import BasePredictor, Input, Path
@@ -32,7 +34,7 @@ class Predictor(BasePredictor):
         """
         Start ComfyUI, ensuring it doesn't attempt to download our local LoRA file
         before running. We do this by blanking out node 41's "lora" field so the
-        weight downloader never sees "adapter_model_epoch172.safetensors".
+        weight downloader never sees it.
         """
         self.comfyUI = ComfyUI("127.0.0.1:8188")
         self.comfyUI.start_server(OUTPUT_DIR, INPUT_DIR)
@@ -62,7 +64,6 @@ class Predictor(BasePredictor):
         and ensure it has a .safetensors extension.
         Returns the final filename, e.g. "adapter_model_epoch172.safetensors".
         """
-
         # Quick check to ensure it's a URL (very basic)
         if not re.match(r"^https?:\/\/", lora_url):
             raise ValueError("Invalid LoRA URL. Please provide a valid https:// or http:// link.")
@@ -82,6 +83,32 @@ class Predictor(BasePredictor):
         resp.raise_for_status()
         with open(dst_path, "wb") as f:
             f.write(resp.content)
+
+        return filename
+
+    def handle_replicate_weights(self, replicate_weights: Path) -> str:
+        """
+        Extract ONLY lora_comfyui.safetensors from the user-provided tar file
+        and move it to ComfyUI/models/loras/.
+        Return the final filename ("lora_comfyui.safetensors").
+        """
+        lora_dir = os.path.join("ComfyUI", "models", "loras")
+        os.makedirs(lora_dir, exist_ok=True)
+        # TODO: add starts w data:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with tarfile.open(str(replicate_weights), "r:*") as tar:
+                tar.extractall(path=temp_dir)
+
+            # We specifically want the ComfyUI version
+            comfy_lora_path = os.path.join(temp_dir, "lora_comfyui.safetensors")
+            if not os.path.exists(comfy_lora_path):
+                raise FileNotFoundError(
+                    "No 'lora_comfyui.safetensors' found in the provided tar."
+                )
+
+            filename = "lora_comfyui.safetensors"
+            dst_path = os.path.join(lora_dir, filename)
+            shutil.copy2(comfy_lora_path, dst_path)
 
         return filename
 
@@ -139,7 +166,12 @@ class Predictor(BasePredictor):
             description="The text prompt describing your video scene.",
         ),
         lora_url: str = Input(
+            default="",
             description="A URL pointing to your LoRA .safetensors file for fine-tuning."
+        ),
+        replicate_weights: Path = Input(
+            default=None,
+            description="A tar file containing LoRA weights from replicate. (Optional)",
         ),
         lora_strength: float = Input(
             default=1.0, description="Scale/strength for your LoRA."
@@ -183,7 +215,9 @@ class Predictor(BasePredictor):
         seed: int = seed_helper.predict_seed(),
     ) -> Path:
         """
-        Create a video using HunyuanVideo with a remote LoRA (downloaded at runtime).
+        Create a video using HunyuanVideo with either a remote LoRA (downloaded at runtime)
+        or a replicate tar file containing LoRA. If both are supplied, replicate_weights
+        takes precedence.
         """
         # Convert user seed to a valid integer
         seed = seed_helper.generate(seed)
@@ -191,8 +225,17 @@ class Predictor(BasePredictor):
         # 1. Clean up previous runs
         self.comfyUI.cleanup(ALL_DIRECTORIES)
 
-        # 2. Download the LoRA file to ComfyUI/models/loras/
-        lora_name = self.copy_lora_file(lora_url)
+        # 2. Decide how to obtain our LoRA file name
+        if replicate_weights is not None:
+            # Use replicate tar (prefer the comfyui version)
+            lora_name = self.handle_replicate_weights(replicate_weights)
+        else:
+            # Use the remote url
+            if not lora_url:
+                raise ValueError(
+                    "No LoRA provided. Provide either replicate_weights tar or a lora_url."
+                )
+            lora_name = self.copy_lora_file(lora_url)
 
         # 3. Load the main workflow JSON
         with open(api_json_file, "r") as f:

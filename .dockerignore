@@ -50,3 +50,6 @@ ComfyUI/tests-unit
 ComfyUI/notebooks
 ComfyUI/script_examples
 ComfyUI/comfyui_screenshot.png
+
+# Musubi-tuner
+/ckpts/*
