@@ -242,7 +242,7 @@ frame_extraction = "head"
 
     # 11. Archive final results
     output_path = "/tmp/trained_model.tar"
-    output_path = "/tmp/trained_model.tar"
+    # output_path = "trained_model.tar"
     print(f"Archiving LoRA outputs to {output_path}")
     os.system(f"tar -cvf {output_path} -C {OUTPUT_DIR} .")
 
