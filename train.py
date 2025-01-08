@@ -6,7 +6,7 @@ import torch
 import sys
 from typing import Optional
 from zipfile import ZipFile, is_zipfile
-
+from huggingface_hub import HfApi
 from cog import BaseModel, Input, Path, Secret
 
 
@@ -23,6 +23,7 @@ MODEL_CACHE = "ckpts"
 # Hunyuan model files to download
 MODEL_FILES = ["hunyuan-video-t2v-720p.tar", "text_encoder.tar", "text_encoder_2.tar"]
 BASE_URL = "https://weights.replicate.delivery/default/hunyuan-video/ckpts/"
+JOB_DIR = Path("hunyuan-lora-for-hf")
 
 # If your scripts are in "musubi-tuner", you can add it to the path:
 sys.path.append("musubi-tuner")
@@ -75,12 +76,12 @@ def train(
         description="Random seed (use <=0 for a random pick).",
         default=42,
     ),
-    hub_model_id: str = Input(
-        description="(Optional) Hugging Face repo to upload trained LoRA.",
-        default="",
+    hf_repo_id: str = Input(
+        description="Hugging Face repository ID, if you'd like to upload the trained LoRA to Hugging Face. For example, lucataco/flux-dev-lora. If the given repo does not exist, a new public repo will be created.",
+        default=None,
     ),
     hf_token: Secret = Input(
-        description="(Optional) Hugging Face token to upload the LoRA.",
+        description="Hugging Face token, if you'd like to upload the trained LoRA to Hugging Face.",
         default=None,
     ),
 ) -> TrainingOutput:
@@ -91,7 +92,7 @@ def train(
     1. Clean up old run output if present.
     2. Download base weights if needed.
     3. Extract input videos & .txt files.
-    4. Possibly create train.toml if not found.
+    4. Possibly create train.toml if not found. (We'll fix the default so it won't fail on short videos.)
     5. Cache latents, text encoder outputs.
     6. Train LoRA with musubi-tuner/hv_train_network.py.
     7. Convert to ComfyUI-compatible safetensors using musubi-tuner/convert_lora.py.
@@ -113,7 +114,7 @@ def train(
         seed = int.from_bytes(os.urandom(2), "big")
     print(f"Using seed: {seed}")
 
-    # 4. Create train.toml if missing
+    # 4. Create train.toml if missing (FIX HERE to avoid zero video frames)
     if not os.path.exists("train.toml"):
         print("Creating default train.toml...")
         with open("train.toml", "w") as f:
@@ -128,8 +129,9 @@ bucket_no_upscale = false
 [[datasets]]
 video_directory = "./input/videos"
 cache_directory = "./input/cache_directory"
-target_frames = [1, 25, 45]
-frame_extraction = "head"
+# Instead of forcing frames 1,25,45, switch to uniform extraction of 3 frames
+frame_extraction = "uniform"
+frames_per_clip = 3
 """
             )
 
@@ -236,16 +238,17 @@ frame_extraction = "head"
     else:
         print("Warning: lora.safetensors not found, skipping conversion.")
 
-    # 10. If we have HF token and ID, upload to HF
-    if hf_token and hub_model_id:
-        handle_hf_upload(hub_model_id, hf_token)
 
     # 11. Archive final results
     output_path = "/tmp/trained_model.tar"
-    # output_path = "trained_model.tar"
     print(f"Archiving LoRA outputs to {output_path}")
     os.system(f"tar -cvf {output_path} -C {OUTPUT_DIR} .")
 
+    # 10. If we have HF token and ID, upload to HF
+    if hf_token and hf_repo_id:
+        shutil.move(os.path.join(OUTPUT_DIR, "lora.safetensors"), JOB_DIR / Path("lora.safetensors"))
+        handle_hf_upload(hf_repo_id, hf_token)
+        
     return TrainingOutput(weights=Path(output_path))
 
 
@@ -291,10 +294,47 @@ def extract_zip(zip_path: Path, extraction_dir: str):
     print(f"Extracted {file_count} total files to: {final_videos_path}")
 
 
-def handle_hf_upload(hub_model_id: str, hf_token: Secret):
+def handle_hf_upload(hf_repo_id: str, hf_token: Secret):
     """Simple huggingface-cli upload."""
-    token = hf_token.get_secret_value()
-    print(f"Logging into Hugging Face and uploading to {hub_model_id}")
-    os.system(f"huggingface-cli login --token {token}")
-    # For new repos, you may need to run: huggingface-cli repo create <hub_model_id>
-    os.system(f"huggingface-cli upload {OUTPUT_DIR} --repo-id {hub_model_id} --folder")
+    if hf_token is not None and hf_repo_id is not None:
+        try:
+            handle_hf_readme(hf_repo_id)
+            print(f"Uploading to Hugging Face: {hf_repo_id}")
+            api = HfApi()
+
+            repo_url = api.create_repo(
+                hf_repo_id,
+                private=False,
+                exist_ok=True,
+                token=hf_token.get_secret_value(),
+            )
+
+            print(f"HF Repo URL: {repo_url}")
+
+            api.upload_folder(
+                repo_id=hf_repo_id,
+                folder_path=JOB_DIR,
+                repo_type="model",
+                use_auth_token=hf_token.get_secret_value(),
+            )
+        except Exception as e:
+            print(f"Error uploading to Hugging Face: {str(e)}")
+            
+def handle_hf_readme(hf_repo_id: str):
+    readme_path = JOB_DIR / Path("README.md")
+    license_path = Path("hf-lora-readme-template.md")
+    shutil.copy(license_path, readme_path)
+
+    content = readme_path.read_text()
+    content = content.replace("[hf_repo_id]", hf_repo_id)
+
+    repo_parts = hf_repo_id.split("/")
+    if len(repo_parts) > 1:
+        title = repo_parts[1].replace("-", " ").title()
+        content = content.replace("[title]", title)
+    else:
+        content = content.replace("[title]", hf_repo_id)
+
+    print(content)
+
+    readme_path.write_text(content)
