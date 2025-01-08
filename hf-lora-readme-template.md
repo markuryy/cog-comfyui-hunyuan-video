@@ -7,6 +7,7 @@ language:
 tags:
 - hunyuan
 - hunyuan-video
+- hunyuan-lora
 - lora
 - replicate
 base_model: "tencent/HunyuanVideo"
