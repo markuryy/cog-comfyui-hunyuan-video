@@ -12,17 +12,14 @@ class TrainingOutput(BaseModel):
     weights: Path
 
 
-# Directories used for input/output data and cached model files
 INPUT_DIR = "input"
 OUTPUT_DIR = "output"
 MODEL_CACHE = "ckpts"
 HF_UPLOAD_DIR = "hunyuan-lora-for-hf"
 
-# Hunyuan model files to download
 MODEL_FILES = ["hunyuan-video-t2v-720p.tar", "text_encoder.tar", "text_encoder_2.tar"]
 BASE_URL = "https://weights.replicate.delivery/default/hunyuan-video/ckpts/"
 
-# If your scripts are in "musubi-tuner", you can add it to the path:
 sys.path.append("musubi-tuner")
 
 
@@ -84,34 +81,51 @@ def train(
 ) -> TrainingOutput:
     """
     Minimal Hunyuan LoRA training script using musubi-tuner.
-
-    Steps:
-    1. Clean up old run output if present
-    2. Download base weights if needed
-    3. Extract input videos & .txt files
-    4. Possibly create train.toml if not found
-    5. Cache latents, text encoder outputs
-    6. Train LoRA with musubi-tuner/hv_train_network.py
-    7. Convert to ComfyUI-compatible safetensors using musubi-tuner/convert_lora.py.
-    8. Tar everything and return
-    9. Optionally push to HF
     """
 
     if not input_videos:
         raise ValueError("You must provide a zip with videos & .txt captions.")
 
-    # 1. Clean up old outputs
     clean_up()
-
-    # 2. Download base weights
     download_weights()
+    seed = handle_seed(seed)
+    create_train_toml()
+    extract_zip(input_videos, INPUT_DIR)
+    cache_latents()
+    cache_text_encoder_outputs(batch_size)
+    run_lora_training(
+        epochs,
+        rank,
+        optimizer,
+        learning_rate,
+        timestep_sampling,
+        seed,
+        gradient_checkpointing,
+    )
+    convert_lora_to_comfyui_format()
+    output_path = archive_results()
 
-    # 3. Random seed logic
+    if hf_token and hf_repo_id:
+        os.makedirs(HF_UPLOAD_DIR, exist_ok=True)
+        shutil.move(
+            os.path.join(OUTPUT_DIR, "lora.safetensors"),
+            HF_UPLOAD_DIR / Path("lora.safetensors"),
+        )
+        handle_hf_upload(hf_repo_id, hf_token)
+
+    return TrainingOutput(weights=Path(output_path))
+
+
+def handle_seed(seed: int) -> int:
+    """Handle random seed logic"""
     if seed <= 0:
         seed = int.from_bytes(os.urandom(2), "big")
     print(f"Using seed: {seed}")
+    return seed
 
-    # 4. Create train.toml
+
+def create_train_toml():
+    """Create train.toml configuration file"""
     print("Creating train.toml...")
     with open("train.toml", "w") as f:
         f.write(
@@ -130,10 +144,9 @@ frame_extraction = "head"
 """
         )
 
-    # 5. Extract videos & text
-    extract_zip(input_videos, INPUT_DIR)
 
-    # 6. Cache latents
+def cache_latents():
+    """Cache latents using musubi-tuner"""
     latent_args = [
         "python",
         "musubi-tuner/cache_latents.py",
@@ -147,7 +160,9 @@ frame_extraction = "head"
     ]
     subprocess.run(latent_args, check=True)
 
-    # 7. Cache text encoder outputs
+
+def cache_text_encoder_outputs(batch_size: int):
+    """Cache text encoder outputs"""
     text_encoder_args = [
         "python",
         "musubi-tuner/cache_text_encoder_outputs.py",
@@ -162,7 +177,17 @@ frame_extraction = "head"
     ]
     subprocess.run(text_encoder_args, check=True)
 
-    # 8. Perform LoRA training
+
+def run_lora_training(
+    epochs: int,
+    rank: int,
+    optimizer: str,
+    learning_rate: float,
+    timestep_sampling: str,
+    seed: int,
+    gradient_checkpointing: bool,
+):
+    """Run LoRA training"""
     print("Running LoRA training...")
     training_args = [
         "accelerate",
@@ -212,7 +237,9 @@ frame_extraction = "head"
 
     subprocess.run(training_args, check=True)
 
-    # 9. Convert the resulting LoRA to ComfyUI-compatible format
+
+def convert_lora_to_comfyui_format():
+    """Convert LoRA to ComfyUI-compatible format"""
     original_lora_path = os.path.join(OUTPUT_DIR, "lora.safetensors")
     if os.path.exists(original_lora_path):
         converted_lora_path = os.path.join(OUTPUT_DIR, "lora_comfyui.safetensors")
@@ -233,21 +260,13 @@ frame_extraction = "head"
     else:
         print("Warning: lora.safetensors not found, skipping conversion.")
 
-    # 11. Archive final results
+
+def archive_results() -> str:
+    """Archive final results and return output path"""
     output_path = "/tmp/trained_model.tar"
     print(f"Archiving LoRA outputs to {output_path}")
     os.system(f"tar -cvf {output_path} -C {OUTPUT_DIR} .")
-
-    # 10. If we have HF token and ID, upload to HF
-    if hf_token and hf_repo_id:
-        os.makedirs(HF_UPLOAD_DIR, exist_ok=True)
-        shutil.move(
-            os.path.join(OUTPUT_DIR, "lora.safetensors"),
-            HF_UPLOAD_DIR / Path("lora.safetensors"),
-        )
-        handle_hf_upload(hf_repo_id, hf_token)
-
-    return TrainingOutput(weights=Path(output_path))
+    return output_path
 
 
 def clean_up():
