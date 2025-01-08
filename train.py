@@ -1,10 +1,7 @@
 import os
 import shutil
 import subprocess
-import time
-import torch
 import sys
-from typing import Optional
 from zipfile import ZipFile, is_zipfile
 from huggingface_hub import HfApi
 from cog import BaseModel, Input, Path, Secret
