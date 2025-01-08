@@ -11,7 +11,6 @@ tags:
 - replicate
 base_model: "tencent/HunyuanVideo"
 pipeline_tag: text-to-video
-[instance_prompt]
 ---
 
 # [title]

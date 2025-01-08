@@ -19,11 +19,11 @@ class TrainingOutput(BaseModel):
 INPUT_DIR = "input"
 OUTPUT_DIR = "output"
 MODEL_CACHE = "ckpts"
+HF_UPLOAD_DIR = "hunyuan-lora-for-hf"
 
 # Hunyuan model files to download
 MODEL_FILES = ["hunyuan-video-t2v-720p.tar", "text_encoder.tar", "text_encoder_2.tar"]
 BASE_URL = "https://weights.replicate.delivery/default/hunyuan-video/ckpts/"
-JOB_DIR = Path("hunyuan-lora-for-hf")
 
 # If your scripts are in "musubi-tuner", you can add it to the path:
 sys.path.append("musubi-tuner")
@@ -115,11 +115,11 @@ def train(
     print(f"Using seed: {seed}")
 
     # 4. Create train.toml if missing (FIX HERE to avoid zero video frames)
-    if not os.path.exists("train.toml"):
-        print("Creating default train.toml...")
-        with open("train.toml", "w") as f:
-            f.write(
-                """[general]
+    # if not os.path.exists("train.toml"):
+    print("Creating default train.toml...")
+    with open("train.toml", "w") as f:
+        f.write(
+            """[general]
 resolution = [960, 544]
 caption_extension = ".txt"
 batch_size = 1
@@ -129,11 +129,10 @@ bucket_no_upscale = false
 [[datasets]]
 video_directory = "./input/videos"
 cache_directory = "./input/cache_directory"
-# Instead of forcing frames 1,25,45, switch to uniform extraction of 3 frames
-frame_extraction = "uniform"
-frames_per_clip = 3
+target_frames = [1, 25, 45]
+frame_extraction = "head"
 """
-            )
+        )
 
     # 5. Extract videos & text
     extract_zip(input_videos, INPUT_DIR)
@@ -245,9 +244,10 @@ frames_per_clip = 3
 
     # 10. If we have HF token and ID, upload to HF
     if hf_token and hf_repo_id:
+        os.makedirs(HF_UPLOAD_DIR, exist_ok=True)
         shutil.move(
             os.path.join(OUTPUT_DIR, "lora.safetensors"),
-            JOB_DIR / Path("lora.safetensors"),
+            HF_UPLOAD_DIR / Path("lora.safetensors"),
         )
         handle_hf_upload(hf_repo_id, hf_token)
 
@@ -255,11 +255,10 @@ frames_per_clip = 3
 
 
 def clean_up():
-    """Removes INPUT_DIR and OUTPUT_DIR if they exist."""
-    if os.path.exists(INPUT_DIR):
-        shutil.rmtree(INPUT_DIR)
-    if os.path.exists(OUTPUT_DIR):
-        shutil.rmtree(OUTPUT_DIR)
+    """Removes INPUT_DIR, OUTPUT_DIR, and HF_UPLOAD_DIR if they exist."""
+    for dir in [INPUT_DIR, OUTPUT_DIR, HF_UPLOAD_DIR]:
+        if os.path.exists(dir):
+            shutil.rmtree(dir)
 
 
 def download_weights():
@@ -297,10 +296,11 @@ def extract_zip(zip_path: Path, extraction_dir: str):
 
 
 def handle_hf_upload(hf_repo_id: str, hf_token: Secret):
-    """Simple huggingface-cli upload."""
+    print(f"HF Token: {hf_token}")
+    print(f"HF Repo ID: {hf_repo_id}")
     if hf_token is not None and hf_repo_id is not None:
         try:
-            handle_hf_readme(hf_repo_id)
+            title = handle_hf_readme(hf_repo_id)
             print(f"Uploading to Hugging Face: {hf_repo_id}")
             api = HfApi()
 
@@ -313,9 +313,17 @@ def handle_hf_upload(hf_repo_id: str, hf_token: Secret):
 
             print(f"HF Repo URL: {repo_url}")
 
+            # Rename lora.safetensors to hunyuan-[title].safetensors
+            old_path = HF_UPLOAD_DIR / Path("lora.safetensors")
+            new_name = title.lower()
+            if not new_name.startswith("hunyuan"):
+                new_name = f"hunyuan-{new_name}"
+            new_path = HF_UPLOAD_DIR / Path(f"{new_name}.safetensors")
+            os.rename(old_path, new_path)
+
             api.upload_folder(
                 repo_id=hf_repo_id,
-                folder_path=JOB_DIR,
+                folder_path=HF_UPLOAD_DIR,
                 repo_type="model",
                 use_auth_token=hf_token.get_secret_value(),
             )
@@ -323,21 +331,23 @@ def handle_hf_upload(hf_repo_id: str, hf_token: Secret):
             print(f"Error uploading to Hugging Face: {str(e)}")
 
 
-def handle_hf_readme(hf_repo_id: str):
-    readme_path = JOB_DIR / Path("README.md")
+def handle_hf_readme(hf_repo_id: str) -> str:
+    readme_path = HF_UPLOAD_DIR / Path("README.md")
     license_path = Path("hf-lora-readme-template.md")
     shutil.copy(license_path, readme_path)
 
     content = readme_path.read_text()
-    content = content.replace("[hf_repo_id]", hf_repo_id)
 
     repo_parts = hf_repo_id.split("/")
     if len(repo_parts) > 1:
         title = repo_parts[1].replace("-", " ").title()
         content = content.replace("[title]", title)
     else:
-        content = content.replace("[title]", hf_repo_id)
+        title = hf_repo_id
+        content = content.replace("[title]", title)
 
+    print("HF readme content:\n==================\n")
     print(content)
-
+    print("\n==================\n")
     readme_path.write_text(content)
+    return title.replace(" ", "-")
