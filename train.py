@@ -74,7 +74,7 @@ def train(
     ),
     seed: int = Input(
         description="Random seed (use <=0 for a random pick).",
-        default=42,
+        default=0,
     ),
     hf_repo_id: str = Input(
         description="Hugging Face repository ID, if you'd like to upload the trained LoRA to Hugging Face. For example, lucataco/flux-dev-lora. If the given repo does not exist, a new public repo will be created.",
@@ -89,15 +89,15 @@ def train(
     Minimal Hunyuan LoRA training script using musubi-tuner.
 
     Steps:
-    1. Clean up old run output if present.
-    2. Download base weights if needed.
-    3. Extract input videos & .txt files.
-    4. Possibly create train.toml if not found. (We'll fix the default so it won't fail on short videos.)
-    5. Cache latents, text encoder outputs.
-    6. Train LoRA with musubi-tuner/hv_train_network.py.
+    1. Clean up old run output if present
+    2. Download base weights if needed
+    3. Extract input videos & .txt files
+    4. Possibly create train.toml if not found
+    5. Cache latents, text encoder outputs
+    6. Train LoRA with musubi-tuner/hv_train_network.py
     7. Convert to ComfyUI-compatible safetensors using musubi-tuner/convert_lora.py.
-    8. Tar everything and return.
-    9. Optionally push to HF if desired.
+    8. Tar everything and return
+    9. Optionally push to HF
     """
 
     if not input_videos:
@@ -114,9 +114,8 @@ def train(
         seed = int.from_bytes(os.urandom(2), "big")
     print(f"Using seed: {seed}")
 
-    # 4. Create train.toml if missing (FIX HERE to avoid zero video frames)
-    # if not os.path.exists("train.toml"):
-    print("Creating default train.toml...")
+    # 4. Create train.toml
+    print("Creating train.toml...")
     with open("train.toml", "w") as f:
         f.write(
             """[general]
