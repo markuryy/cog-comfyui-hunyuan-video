@@ -238,7 +238,6 @@ frames_per_clip = 3
     else:
         print("Warning: lora.safetensors not found, skipping conversion.")
 
-
     # 11. Archive final results
     output_path = "/tmp/trained_model.tar"
     print(f"Archiving LoRA outputs to {output_path}")
@@ -246,9 +245,12 @@ frames_per_clip = 3
 
     # 10. If we have HF token and ID, upload to HF
     if hf_token and hf_repo_id:
-        shutil.move(os.path.join(OUTPUT_DIR, "lora.safetensors"), JOB_DIR / Path("lora.safetensors"))
+        shutil.move(
+            os.path.join(OUTPUT_DIR, "lora.safetensors"),
+            JOB_DIR / Path("lora.safetensors"),
+        )
         handle_hf_upload(hf_repo_id, hf_token)
-        
+
     return TrainingOutput(weights=Path(output_path))
 
 
@@ -319,7 +321,8 @@ def handle_hf_upload(hf_repo_id: str, hf_token: Secret):
             )
         except Exception as e:
             print(f"Error uploading to Hugging Face: {str(e)}")
-            
+
+
 def handle_hf_readme(hf_repo_id: str):
     readme_path = JOB_DIR / Path("README.md")
     license_path = Path("hf-lora-readme-template.md")
