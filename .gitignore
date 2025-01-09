@@ -16,3 +16,7 @@ manifest.txt
 updated_weights.json
 downloaded_user_models/
 .cog
+/ckpts/
+/input/
+/train.toml
+/weights
