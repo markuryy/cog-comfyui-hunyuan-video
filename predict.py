@@ -22,7 +22,7 @@ ALL_DIRECTORIES = [OUTPUT_DIR, INPUT_DIR, COMFYUI_TEMP_OUTPUT_DIR]
 mimetypes.add_type("video/mp4", ".mp4")
 mimetypes.add_type("video/quicktime", ".mov")
 
-api_json_file = "t2v_lora.json"
+api_json_file = "t2v-lora.json"
 
 # Ensure HF Hub is online for LoRA downloads
 if "HF_HUB_OFFLINE" in os.environ:
