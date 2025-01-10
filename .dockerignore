@@ -45,3 +45,4 @@ ComfyUI/custom_nodes/**/images/**
 
 # Musubi-tuner
 /ckpts/*
+ComfyUI/models/text_encoders/*
