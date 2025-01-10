@@ -7,13 +7,5 @@
     "repo": "https://github.com/Iemand005/ComfyUI-Touchpad-Gestures",
     "commit": "dd6e5c7",
     "notes": "Adds touchpad/trackpad gesture support for panning and zooming"
-  },
-  {
-    "repo": "https://github.com/kijai/ComfyUI-HunyuanVideoWrapper",
-    "commit": "b6c1705"
-  },
-  {
-    "repo": "https://github.com/logtd/ComfyUI-HunyuanLoom",
-    "commit": "5f3d2ba"
   }
 ]

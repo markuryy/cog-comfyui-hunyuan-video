@@ -22,18 +22,17 @@ ALL_DIRECTORIES = [OUTPUT_DIR, INPUT_DIR, COMFYUI_TEMP_OUTPUT_DIR]
 mimetypes.add_type("video/mp4", ".mp4")
 mimetypes.add_type("video/quicktime", ".mov")
 
-api_json_file = "t2v-lora.json"
+api_json_file = "t2v_lora.json"
 
 # Ensure HF Hub is online for LoRA downloads
 if "HF_HUB_OFFLINE" in os.environ:
     del os.environ["HF_HUB_OFFLINE"]
 
-
 class Predictor(BasePredictor):
     def setup(self):
         """
         Start ComfyUI, ensuring it doesn't attempt to download our local LoRA file
-        before running. We do this by blanking out node 41's "lora" field so the
+        before running. We do this by blanking out node 80's "lora_name" field so the
         weight downloader never sees it.
         """
         self.comfyUI = ComfyUI("127.0.0.1:8188")
@@ -43,9 +42,9 @@ class Predictor(BasePredictor):
         with open(api_json_file, "r") as file:
             workflow = json.loads(file.read())
 
-        # 2. Blank node 41's "lora" so ComfyUI won't attempt to download it
-        if workflow.get("41") and "lora" in workflow["41"]["inputs"]:
-            workflow["41"]["inputs"]["lora"] = ""
+        # 2. Blank node 80's "lora_name" so ComfyUI won't attempt to download it
+        if workflow.get("80") and "lora_name" in workflow["80"]["inputs"]:
+            workflow["80"]["inputs"]["lora_name"] = ""
 
         # 3. Only handle the base model weights here
         self.comfyUI.handle_weights(
@@ -53,8 +52,8 @@ class Predictor(BasePredictor):
             weights_to_download=[
                 "hunyuan_video_720_fp8_e4m3fn.safetensors",
                 "hunyuan_video_vae_bf16.safetensors",
-                "clip-vit-large-patch14",
-                "llava-llama-3-8b-text-encoder-tokenizer",
+                "clip_l.safetensors",
+                "llava_llama3_fp8_scaled.safetensors"
             ],
         )
 
@@ -91,7 +90,6 @@ class Predictor(BasePredictor):
 
         else:
             # Otherwise, treat lora_url as a Hugging Face repo ID
-            # (e.g. "histin116/Hunyuan-Social-Fashion-Lora")
             repo_id = lora_url.strip()
             if "/" not in repo_id:
                 raise ValueError(
@@ -137,7 +135,7 @@ class Predictor(BasePredictor):
         """
         lora_dir = os.path.join("ComfyUI", "models", "loras")
         os.makedirs(lora_dir, exist_ok=True)
-        # TODO: add starts w data:
+
         with tempfile.TemporaryDirectory() as temp_dir:
             with tarfile.open(str(replicate_weights), "r:*") as tar:
                 tar.extractall(path=temp_dir)
@@ -165,7 +163,6 @@ class Predictor(BasePredictor):
         guidance_scale: float,
         flow_shift: int,
         seed: int,
-        force_offload: bool,
         denoise_strength: float,
         num_frames: int,
         lora_name: str,
@@ -174,33 +171,39 @@ class Predictor(BasePredictor):
         crf: int,
     ):
         """
-        Update the t2v-lora.json workflow with user-selected parameters.
+        Update the t2v_lora.json workflow with user-selected parameters.
         """
-        # Node 3: HyVideoSampler
-        workflow["3"]["inputs"]["width"] = width
-        workflow["3"]["inputs"]["height"] = height
-        workflow["3"]["inputs"]["steps"] = steps
-        workflow["3"]["inputs"]["embedded_guidance_scale"] = guidance_scale
-        workflow["3"]["inputs"]["flow_shift"] = flow_shift
-        workflow["3"]["inputs"]["seed"] = seed
-        workflow["3"]["inputs"]["force_offload"] = 1 if force_offload else 0
-        workflow["3"]["inputs"]["denoise_strength"] = denoise_strength
-        workflow["3"]["inputs"]["num_frames"] = num_frames
+        # Node 45/81: EmptyHunyuanLatentVideo
+        for node_id in ["45", "81"]:
+            if node_id in workflow:
+                workflow[node_id]["inputs"]["width"] = width
+                workflow[node_id]["inputs"]["height"] = height
+                workflow[node_id]["inputs"]["length"] = num_frames
 
-        # Node 30: HyVideoTextEncode
-        workflow["30"]["inputs"]["prompt"] = prompt
-        workflow["30"]["inputs"]["force_offload"] = (
-            "bad quality video" if force_offload else " "
-        )
+        # Node 17: BasicScheduler
+        workflow["17"]["inputs"]["steps"] = steps
+        workflow["17"]["inputs"]["denoise"] = denoise_strength
 
-        # Node 41: HyVideoLoraSelect
-        workflow["41"]["inputs"]["lora"] = lora_name
-        workflow["41"]["inputs"]["strength"] = lora_strength
+        # Node 26: FluxGuidance
+        workflow["26"]["inputs"]["guidance"] = guidance_scale
 
-        # Node 34: VHS_VideoCombine
-        workflow["34"]["inputs"]["frame_rate"] = frame_rate
-        workflow["34"]["inputs"]["crf"] = crf
-        workflow["34"]["inputs"]["save_output"] = True
+        # Node 67: ModelSamplingSD3
+        workflow["67"]["inputs"]["shift"] = flow_shift
+
+        # Node 25: RandomNoise
+        workflow["25"]["inputs"]["noise_seed"] = seed
+
+        # Node 44: CLIPTextEncode
+        workflow["44"]["inputs"]["text"] = prompt
+
+        # Node 80: LoraLoaderModelOnly
+        workflow["80"]["inputs"]["lora_name"] = lora_name
+        workflow["80"]["inputs"]["strength_model"] = lora_strength
+
+        # Node 79: VHS_VideoCombine
+        workflow["79"]["inputs"]["frame_rate"] = frame_rate
+        workflow["79"]["inputs"]["crf"] = crf
+        workflow["79"]["inputs"]["save_output"] = True
 
     def predict(
         self,
@@ -220,28 +223,25 @@ class Predictor(BasePredictor):
             default=1.0, description="Scale/strength for your LoRA."
         ),
         width: int = Input(
-            default=640, ge=64, le=1536, description="Width for the generated video."
+            default=848, ge=64, le=1536, description="Width for the generated video."
         ),
         height: int = Input(
-            default=360, ge=64, le=1024, description="Height for the generated video."
+            default=480, ge=64, le=1024, description="Height for the generated video."
         ),
         steps: int = Input(
-            default=50, ge=1, le=150, description="Number of diffusion steps."
+            default=20, ge=1, le=150, description="Number of diffusion steps."
         ),
         guidance_scale: float = Input(
             default=6.0, description="Overall influence of text vs. model."
         ),
         flow_shift: int = Input(
-            default=9, ge=0, le=20, description="Video continuity factor (flow)."
-        ),
-        force_offload: bool = Input(
-            default=True, description="Whether to force model layers offloaded to CPU."
+            default=7, ge=0, le=20, description="Video continuity factor (flow)."
         ),
         denoise_strength: float = Input(
             default=1.0, description="Controls how strongly noise is applied each step."
         ),
         num_frames: int = Input(
-            default=85,
+            default=73,
             ge=1,
             le=300,
             description="How many frames (duration) in the resulting video.",
@@ -284,10 +284,10 @@ class Predictor(BasePredictor):
         with open(api_json_file, "r") as f:
             workflow = json.loads(f.read())
 
-        # 3a. Zero out node 41 lora so handle_weights won't see it
-        workflow["41"]["inputs"]["lora"] = ""
+        # 3a. Zero out node 80 lora so handle_weights won't see it
+        workflow["80"]["inputs"]["lora_name"] = ""
 
-        # 4. Fill in user parameters, skipping the real LoRA name/strength for now
+        # 4. Fill in user parameters
         self.update_workflow(
             workflow=workflow,
             prompt=prompt,
@@ -297,7 +297,6 @@ class Predictor(BasePredictor):
             guidance_scale=guidance_scale,
             flow_shift=flow_shift,
             seed=seed,
-            force_offload=force_offload,
             denoise_strength=denoise_strength,
             num_frames=num_frames,
             lora_name="",  # intentionally blank
@@ -309,9 +308,10 @@ class Predictor(BasePredictor):
         # 5. Load the workflow -> handle_weights sees lora="", won't attempt a download
         wf = self.comfyUI.load_workflow(workflow)
 
-        # 5a. Now set the real LoRA file
-        wf["41"]["inputs"]["lora"] = lora_name
-        wf["41"]["inputs"]["strength"] = lora_strength
+        # 5a. Now set the real LoRA file with path
+        lora_path = os.path.join("HunyuanVideo", lora_name)
+        wf["80"]["inputs"]["lora_name"] = lora_path
+        wf["80"]["inputs"]["strength_model"] = lora_strength
 
         # 6. Run the workflow
         self.comfyUI.connect()

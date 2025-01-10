@@ -1,106 +1,180 @@
 {
-  "1": {
+  "8": {
     "inputs": {
-      "model": "hunyuan_video_720_fp8_e4m3fn.safetensors",
-      "base_precision": "bf16",
-      "quantization": "fp8_e4m3fn",
-      "load_device": "offload_device",
-      "attention_mode": "sdpa",
-      "lora": [
-        "41",
-        0
-      ]
-    },
-    "class_type": "HyVideoModelLoader",
-    "_meta": {
-      "title": "HunyuanVideo Model Loader"
-    }
-  },
-  "3": {
-    "inputs": {
-      "width": 1280,
-      "height": 320,
-      "num_frames": 85,
-      "steps": 50,
-      "embedded_guidance_scale": 6,
-      "flow_shift": 9,
-      "seed": 6,
-      "force_offload": 1,
-      "denoise_strength": 1,
-      "model": [
-        "1",
-        0
-      ],
-      "hyvid_embeds": [
-        "30",
-        0
-      ]
-    },
-    "class_type": "HyVideoSampler",
-    "_meta": {
-      "title": "HunyuanVideo Sampler"
-    }
-  },
-  "5": {
-    "inputs": {
-      "enable_vae_tiling": true,
-      "temporal_tiling_sample_size": 64,
-      "spatial_tile_sample_min_size": 256,
-      "auto_tile_size": true,
-      "vae": [
-        "7",
-        0
-      ],
       "samples": [
-        "3",
+        "13",
+        0
+      ],
+      "vae": [
+        "10",
         0
       ]
     },
-    "class_type": "HyVideoDecode",
+    "class_type": "VAEDecode",
     "_meta": {
-      "title": "HunyuanVideo Decode"
+      "title": "VAE Decode"
     }
   },
-  "7": {
+  "10": {
     "inputs": {
-      "model_name": "hunyuan_video_vae_bf16.safetensors",
-      "precision": "bf16"
+      "vae_name": "hunyuan_video_vae_bf16.safetensors"
     },
-    "class_type": "HyVideoVAELoader",
+    "class_type": "VAELoader",
     "_meta": {
-      "title": "HunyuanVideo VAE Loader"
+      "title": "Load VAE"
+    }
+  },
+  "11": {
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "llava_llama3_fp8_scaled.safetensors",
+      "type": "hunyuan_video",
+      "device": "default"
+    },
+    "class_type": "DualCLIPLoader",
+    "_meta": {
+      "title": "DualCLIPLoader"
+    }
+  },
+  "12": {
+    "inputs": {
+      "unet_name": "hunyuan_video_t2v_720p_bf16.safetensors",
+      "weight_dtype": "fp8_e4m3fn"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "13": {
+    "inputs": {
+      "noise": [
+        "25",
+        0
+      ],
+      "guider": [
+        "22",
+        0
+      ],
+      "sampler": [
+        "16",
+        0
+      ],
+      "sigmas": [
+        "17",
+        0
+      ],
+      "latent_image": [
+        "45",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
     }
   },
   "16": {
     "inputs": {
-      "llm_model": "Kijai/llava-llama-3-8b-text-encoder-tokenizer",
-      "clip_model": "openai/clip-vit-large-patch14",
-      "precision": "fp16",
-      "apply_final_norm": false,
-      "hidden_state_skip_layer": 2,
-      "quantization": "disabled"
+      "sampler_name": "euler"
     },
-    "class_type": "DownloadAndLoadHyVideoTextEncoder",
+    "class_type": "KSamplerSelect",
     "_meta": {
-      "title": "(Down)Load HunyuanVideo TextEncoder"
+      "title": "KSamplerSelect"
     }
   },
-  "30": {
+  "17": {
     "inputs": {
-      "prompt": "A modern [LUXX] glass-walled lounge with sleek furnishings opens to lush tropical greenery, blending indoor elegance with outdoor serenity.",
-      "force_offload": "bad quality video",
-      "prompt_template": "video",
-      "text_encoders": [
-        "16",
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1,
+      "model": [
+        "79",
         0
       ]
     },
-    "class_type": "HyVideoTextEncode",
+    "class_type": "BasicScheduler",
     "_meta": {
-      "title": "HunyuanVideo TextEncode"
+      "title": "BasicScheduler"
     }
   },
-  "34": {
+  "22": {
+    "inputs": {
+      "model": [
+        "67",
+        0
+      ],
+      "conditioning": [
+        "26",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "BasicGuider"
+    }
+  },
+  "25": {
+    "inputs": {
+      "noise_seed": 1
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "26": {
+    "inputs": {
+      "guidance": 6,
+      "conditioning": [
+        "44",
+        0
+      ]
+    },
+    "class_type": "FluxGuidance",
+    "_meta": {
+      "title": "FluxGuidance"
+    }
+  },
+  "44": {
+    "inputs": {
+      "text": "anime style anime girl with massive fennec ears and one big fluffy tail, she has blonde hair long hair blue eyes wearing a pink sweater and a long blue skirt walking in a beautiful outdoor scenery with snow mountains in the background",
+      "clip": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "45": {
+    "inputs": {
+      "width": 480,
+      "height": 848,
+      "length": 73,
+      "batch_size": 1
+    },
+    "class_type": "EmptyHunyuanLatentVideo",
+    "_meta": {
+      "title": "EmptyHunyuanLatentVideo"
+    }
+  },
+  "67": {
+    "inputs": {
+      "shift": 7,
+      "model": [
+        "79",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "78": {
     "inputs": {
       "frame_rate": 24,
       "loop_count": 0,
@@ -113,23 +187,27 @@
       "pingpong": false,
       "save_output": true,
       "images": [
-        "5",
+        "8",
         0
       ]
     },
     "class_type": "VHS_VideoCombine",
     "_meta": {
-      "title": "Video Combine 🎥🅥🅗🅢"
+      "title": "Video Combine"
     }
   },
-  "41": {
+  "79": {
     "inputs": {
-      "lora": "adapter_model_epoch172.safetensors",
-      "strength": 1
+      "lora_name": "0615-1500.safetensors",
+      "strength_model": 1,
+      "model": [
+        "12",
+        0
+      ]
     },
-    "class_type": "HyVideoLoraSelect",
+    "class_type": "LoraLoaderModelOnly",
     "_meta": {
-      "title": "HunyuanVideo Lora Select"
+      "title": "LoraLoaderModelOnly"
     }
   }
 }
