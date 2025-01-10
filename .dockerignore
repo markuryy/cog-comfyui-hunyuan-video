@@ -53,3 +53,6 @@ ComfyUI/comfyui_screenshot.png
 
 # Musubi-tuner
 /ckpts/*
+
+# Make sure ComfyUI is not ignored
+!ComfyUI/
