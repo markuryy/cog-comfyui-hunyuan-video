@@ -41,7 +41,11 @@ class ComfyUI:
         print(f"Server started in {elapsed_time:.2f} seconds")
 
     def run_server(self, output_directory, input_directory):
-        command = f"python ./ComfyUI/main.py --output-directory {output_directory} --input-directory {input_directory} --disable-metadata"
+        # Get the absolute path to the current directory
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        comfyui_path = os.path.join(base_dir, "ComfyUI", "main.py")
+        
+        command = f"python {comfyui_path} --output-directory {output_directory} --input-directory {input_directory} --disable-metadata"
 
         """
         We need to capture the stdout and stderr from the server process
