@@ -32,7 +32,7 @@ class Predictor(BasePredictor):
     def setup(self):
         """
         Start ComfyUI, ensuring it doesn't attempt to download our local LoRA file
-        before running. We do this by blanking out node 80's "lora_name" field so the
+        before running. We do this by blanking out node 79's "lora_name" field so the
         weight downloader never sees it.
         """
         self.comfyUI = ComfyUI("127.0.0.1:8188")
@@ -42,9 +42,9 @@ class Predictor(BasePredictor):
         with open(api_json_file, "r") as file:
             workflow = json.loads(file.read())
 
-        # 2. Blank node 80's "lora_name" so ComfyUI won't attempt to download it
-        if workflow.get("80") and "lora_name" in workflow["80"]["inputs"]:
-            workflow["80"]["inputs"]["lora_name"] = ""
+        # 2. Blank node 79's "lora_name" so ComfyUI won't attempt to download it
+        if workflow.get("79") and "lora_name" in workflow["79"]["inputs"]:
+            workflow["79"]["inputs"]["lora_name"] = ""
 
         # 3. Only handle the base model weights here
         self.comfyUI.handle_weights(
@@ -196,9 +196,9 @@ class Predictor(BasePredictor):
         # Node 44: CLIPTextEncode
         workflow["44"]["inputs"]["text"] = prompt
 
-        # Node 80: LoraLoaderModelOnly
-        workflow["80"]["inputs"]["lora_name"] = lora_name
-        workflow["80"]["inputs"]["strength_model"] = lora_strength
+        # Node 79: LoraLoaderModelOnly
+        workflow["79"]["inputs"]["lora_name"] = lora_name
+        workflow["79"]["inputs"]["strength_model"] = lora_strength
 
         # Node 79: VHS_VideoCombine
         workflow["79"]["inputs"]["frame_rate"] = frame_rate
@@ -284,8 +284,8 @@ class Predictor(BasePredictor):
         with open(api_json_file, "r") as f:
             workflow = json.loads(f.read())
 
-        # 3a. Zero out node 80 lora so handle_weights won't see it
-        workflow["80"]["inputs"]["lora_name"] = ""
+        # 3a. Zero out node 79 lora so handle_weights won't see it
+        workflow["79"]["inputs"]["lora_name"] = ""
 
         # 4. Fill in user parameters
         self.update_workflow(
@@ -310,8 +310,8 @@ class Predictor(BasePredictor):
 
         # 5a. Now set the real LoRA file with path
         lora_path = os.path.join("HunyuanVideo", lora_name)
-        wf["80"]["inputs"]["lora_name"] = lora_path
-        wf["80"]["inputs"]["strength_model"] = lora_strength
+        wf["79"]["inputs"]["lora_name"] = lora_path
+        wf["79"]["inputs"]["strength_model"] = lora_strength
 
         # 6. Run the workflow
         self.comfyUI.connect()

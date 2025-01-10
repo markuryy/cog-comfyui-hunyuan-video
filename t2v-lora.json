@@ -198,7 +198,7 @@
   },
   "79": {
     "inputs": {
-      "lora_name": "0615-1500.safetensors",
+      "lora_name": "",
       "strength_model": 1,
       "model": [
         "12",
