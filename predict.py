@@ -73,6 +73,7 @@ class Predictor(BasePredictor):
                 "hunyuan_video_720_fp8_e4m3fn.safetensors",
                 "hunyuan_video_vae_bf16.safetensors",
                 "clip_l.safetensors",
+                "llava_llama3_fp8_scaled.safetensors"
             ],
         )
 
