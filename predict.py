@@ -39,7 +39,7 @@ class Predictor(BasePredictor):
         self.comfyUI.start_server(OUTPUT_DIR, INPUT_DIR)
 
         # Manually download the LLAVA model if it doesn't exist
-        llava_model_path = os.path.join("ComfyUI", "models", "clip_vision", "llava_llama3_fp8_scaled.safetensors")
+        llava_model_path = os.path.join("ComfyUI", "models", "text_encoders", "llava_llama3_fp8_scaled.safetensors")
         if not os.path.exists(llava_model_path):
             print("Downloading LLAVA text encoder...")
             os.makedirs(os.path.dirname(llava_model_path), exist_ok=True)
