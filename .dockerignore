@@ -33,26 +33,15 @@ downloaded_user_models/
 *.ipynb
 *.bat
 
-# ComfyUI
-ComfyUI/venv
-ComfyUI/temp
-ComfyUI/user
-ComfyUI/models
-ComfyUI/custom_nodes/comfyUI_controlnet_aux/ckpts
-ComfyUI/custom_nodes/ComfyUI-AnimateDiff-Evolved/models
-ComfyUI/custom_nodes/ComfyUI-AnimateDiff-Evolved/motion_lora
-ComfyUI/custom_nodes/efficiency-nodes-comfyui/images
-
-# ComfyUI bits we just don’t need
-ComfyUI/tests
-ComfyUI/tests-ui
-ComfyUI/tests-unit
-ComfyUI/notebooks
-ComfyUI/script_examples
-ComfyUI/comfyui_screenshot.png
+# ComfyUI exclusions (be specific about what to ignore)
+ComfyUI/venv/**
+ComfyUI/temp/**
+ComfyUI/user/**
+ComfyUI/models/**
+ComfyUI/custom_nodes/**/ckpts/**
+ComfyUI/custom_nodes/**/models/**
+ComfyUI/custom_nodes/**/motion_lora/**
+ComfyUI/custom_nodes/**/images/**
 
 # Musubi-tuner
 /ckpts/*
-
-# Make sure ComfyUI is not ignored
-!ComfyUI/
