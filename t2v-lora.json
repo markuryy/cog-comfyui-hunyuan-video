@@ -38,7 +38,7 @@
   },
   "12": {
     "inputs": {
-      "unet_name": "hunyuan_video_t2v_720p_bf16.safetensors",
+      "unet_name": "hunyuan_video_720_fp8_e4m3fn.safetensors",
       "weight_dtype": "fp8_e4m3fn"
     },
     "class_type": "UNETLoader",
