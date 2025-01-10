@@ -38,22 +38,41 @@ class Predictor(BasePredictor):
         self.comfyUI = ComfyUI("127.0.0.1:8188")
         self.comfyUI.start_server(OUTPUT_DIR, INPUT_DIR)
 
+        # Manually download the LLAVA model if it doesn't exist
+        llava_model_path = os.path.join("ComfyUI", "models", "clip_vision", "llava_llama3_fp8_scaled.safetensors")
+        if not os.path.exists(llava_model_path):
+            print("Downloading LLAVA text encoder...")
+            os.makedirs(os.path.dirname(llava_model_path), exist_ok=True)
+            llava_url = "https://huggingface.co/Comfy-Org/HunyuanVideo_repackaged/resolve/main/split_files/text_encoders/llava_llama3_fp8_scaled.safetensors"
+            resp = requests.get(llava_url)
+            resp.raise_for_status()
+            with open(llava_model_path, "wb") as f:
+                f.write(resp.content)
+            print("✅ Downloaded LLAVA text encoder")
+
         # 1. Load the main workflow JSON
         with open(api_json_file, "r") as file:
             workflow = json.loads(file.read())
 
-        # 2. Blank node 79's "lora_name" so ComfyUI won't attempt to download it
+        # 2. Update the LLAVA model path in the workflow
+        if workflow.get("11"):
+            workflow["11"]["inputs"]["clip_name2"] = "llava_llama3_fp8_scaled.safetensors"
+
+        # 3. Blank node 79's "lora_name" so ComfyUI won't attempt to download it
         if workflow.get("79") and "lora_name" in workflow["79"]["inputs"]:
             workflow["79"]["inputs"]["lora_name"] = ""
 
-        # 3. Only handle the base model weights here
+        # 4. Save the updated workflow
+        with open(api_json_file, "w") as f:
+            json.dump(workflow, f, indent=2)
+
+        # 5. Only handle the base model weights here
         self.comfyUI.handle_weights(
             workflow,
             weights_to_download=[
                 "hunyuan_video_720_fp8_e4m3fn.safetensors",
                 "hunyuan_video_vae_bf16.safetensors",
                 "clip_l.safetensors",
-                "llava_llama3_fp8_scaled.safetensors"
             ],
         )
 
@@ -309,8 +328,7 @@ class Predictor(BasePredictor):
         wf = self.comfyUI.load_workflow(workflow)
 
         # 5a. Now set the real LoRA file with path
-        lora_path = os.path.join("HunyuanVideo", lora_name)
-        wf["79"]["inputs"]["lora_name"] = lora_path
+        wf["79"]["inputs"]["lora_name"] = lora_name
         wf["79"]["inputs"]["strength_model"] = lora_strength
 
         # 6. Run the workflow
