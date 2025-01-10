@@ -41,11 +41,28 @@ class ComfyUI:
         print(f"Server started in {elapsed_time:.2f} seconds")
 
     def run_server(self, output_directory, input_directory):
-        # Get the absolute path to the ComfyUI directory
-        # Since ComfyUI is a submodule, it will be in the project root
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        comfyui_path = os.path.join(base_dir, "ComfyUI", "main.py")
+        # Debug: Print current directory and contents
+        current_dir = os.getcwd()
+        print(f"Current directory: {current_dir}")
+        print("Contents of current directory:", os.listdir(current_dir))
         
+        # Try to find ComfyUI directory
+        possible_paths = [
+            os.path.join(current_dir, "ComfyUI", "main.py"),
+            os.path.join(current_dir, "..", "ComfyUI", "main.py"),
+            os.path.join("/src", "ComfyUI", "main.py")
+        ]
+        
+        print("Checking these paths:")
+        for path in possible_paths:
+            print(f"- {path} {'EXISTS' if os.path.exists(path) else 'NOT FOUND'}")
+        
+        # Use the first path that exists
+        comfyui_path = next((path for path in possible_paths if os.path.exists(path)), None)
+        if not comfyui_path:
+            raise FileNotFoundError(f"Could not find ComfyUI/main.py in any expected location")
+        
+        print(f"Using ComfyUI at: {comfyui_path}")
         command = f"python {comfyui_path} --output-directory {output_directory} --input-directory {input_directory} --disable-metadata"
 
         """
